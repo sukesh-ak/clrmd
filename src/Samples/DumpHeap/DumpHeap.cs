@@ -13,8 +13,6 @@ class Program
             Environment.Exit(1);
         }
 
-        Dictionary<ulong, (int Count, ulong Size, string Name)> stats = new Dictionary<ulong, (int Count, ulong Size, string Name)>();
-
         using DataTarget dataTarget = DataTarget.LoadDump(args[0]);
         foreach (ClrInfo clr in dataTarget.ClrVersions)
         {
@@ -23,34 +21,29 @@ class Program
 
             Console.WriteLine("{0,16} {1,16} {2,8} {3}", "Object", "MethodTable", "Size", "Type");
             foreach (ClrObject obj in heap.EnumerateObjects())
-            {
                 Console.WriteLine($"{obj.Address:x16} {obj.Type.MethodTable:x16} {obj.Size,8:D} {obj.Type.Name}");
 
-                if (!stats.TryGetValue(obj.Type.MethodTable, out (int Count, ulong Size, string Name) item))
-                    item = (0, 0, obj.Type.Name);
-
-                stats[obj.Type.MethodTable] = (item.Count + 1, item.Size + obj.Size, item.Name);
-            }
-
             Console.WriteLine("\nStatistics:");
-            var sorted = from i in stats
-                         orderby i.Value.Size ascending
-                         select new
-                         {
-                             i.Key,
-                             i.Value.Name,
-                             i.Value.Size,
-                             i.Value.Count
-                         };
+            var dumpheapstats = from obj in heap.EnumerateObjects()
+                                group obj by obj.Type into g
+                                let size = g.Sum(p => (long)p.Size)
+                                orderby size
+                                select new
+                                {
+                                    g.Key.MethodTable,
+                                    Count = g.Count(),
+                                    Size = size,
+                                    g.Key.Name
+                                };
 
             Console.WriteLine("{0,16} {1,12} {2,12}\t{3}", "MethodTable", "Count", "Size", "Type");
-            foreach (var item in sorted)
-                Console.WriteLine($"{item.Key:x16} {item.Count,12:D} {item.Size,12:D}\t{item.Name}");
+            foreach (var item in dumpheapstats)
+                Console.WriteLine($"{item.MethodTable:x16} {item.Count,12:D} {item.Size,12:D}\t{item.Name}");
 
-            Console.WriteLine($"Total {sorted.Sum(x => x.Count):0} objects");
+            Console.WriteLine($"Total {dumpheapstats.Sum(x => x.Count):0} objects");
 
             #region >>> Above code sample output below, similiar to !sos.dumpheap
-            //            Object MethodTable     Size Type
+            //          Object MethodTable          Size Type
             //000001d1445a1000 000001d13e08bf90       24 Free
             //000001d1445a1018 000001d13e08bf90       24 Free
             //000001d1445a1030 000001d13e08bf90       24 Free
